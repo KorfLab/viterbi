@@ -151,3 +151,5 @@ of exons and introns. If that value is 100, then the probability of
 leaving the exon state is the reciprocal, or 0.01 (as shown above). The
 probability of staying in the state is then 1 - the exit probability.
 
+In other words, for the HMM described above, exons have an expected
+length of 100 and introns are 50.
