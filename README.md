@@ -96,12 +96,12 @@ you can start the fill for the 2nd column. For the exon state, you have
 2 possibilities: the previous position in the exon or intron state. You
 also have these 2 choices for the intron.
 
-![Fill-1](img/fill1.png)
+![Choosing best paths](img/fill1.png)
 
 After choosing the maximum, record the probability and which state was
 on the maximum path.
 
-![Fill-2](img/fill2.png)
+![Paths chosen](img/fill2.png)
 
 Now you're ready for the next column. Keep repeating the procedure until
 done.
@@ -114,6 +114,8 @@ from. Follow the states backward through the matrix until you get to the
 first column. The path of states you followed is the state sequence.
 This tells you which positions were exon vs. intron. Since you traced
 backwards, it's in reverse order compared to the sequence.
+
+![Trace](img/trace.png)
 
 ## Evaluation ##
 
@@ -153,3 +155,20 @@ probability of staying in the state is then 1 - the exit probability.
 
 In other words, for the HMM described above, exons have an expected
 length of 100 and introns are 50.
+
+## Lexicalized Emissions ##
+
+The reason that this HMM doesn't work very well is because it doesn't
+take into account the _patterns_ of letters. Every letter is independent
+from every other letter. However, in an exon, you're very unlikely to
+find an in-frame stop codon. To make your emissions more realistic, you
+have to give them context. That means instead of emitting an 'A' from an
+Exon with probability 0.2, you have to consider something like "what's
+the probability of emitting an A given the previous 3 nucleotides are
+'CGA'. The emission model is a "3rd order Markov model" because there
+are 3 previous letters.
+
+If you're feeling ambitious, convert your training methods and Viterbi
+to support Nth order Markov models where N is something in the range of
+1-6.
+
