@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+from readfasta import read_record
+from viterbi_tools import *
+import argparse
+import os
+
+parser = argparse.ArgumentParser(
+	description='Viterbi algorithm')
+parser.add_argument('fasta', metavar='<fasta file>', type=str, 
+	help='path to file')
+parser.add_argument('-t', '--transition', type=str, metavar='<path>', required=True,
+	help = 'path to transition probability file')
+parser.add_argument('-e', '--exon', type=str, metavar='<path>', required=True,
+	help = 'path to exon state probability')
+parser.add_argument('-i', '--intron', type=str, metavar='<path>', required=True,
+	help = 'path to intron state probability')
+parser.add_argument('-r', '--random_seed', type=str, metavar='<path>', required=False,
+	help = 'random seed')
+parser.add_argument('-et', '--evaluation_type', type=str, metavar='<path>', required=True,
+	help = 'evaluation type (exon, intron, genome)')
+parser.add_argument('-c', '--coordinates', type=str, metavar='<path>', required=False,
+	help = 'Path to real coordinates of genome')
+arg = parser.parse_args()
+
+if arg.random_seed: random.seed(arg.random_seed)
+# Transition probabilities
+# Exon = 0	Intron = 1
+# [0][0] -> exon to exon
+# [0][1] -> exon to intron
+# [1][0] -> intron to exon
+# [1][1] -> intron to intron
+tpf = arg.transition
+tp = read_transition(tpf)
+# State probabilities
+# Exon = 0 Intron = 1
+# kmer represented in int
+exspf = arg.exon
+inspf = arg.intron
+k = None
+exsp, ek = read_mm(exspf, 'exon')
+insp, ik = read_mm(inspf, 'intron')
+if ek == ik: k = ek
+else: sys.exit('inconsistent k num between intron and exon file')
+sp = [exsp, insp]
+# Probabilities to logodds
+tp = logodds(tp)
+sp = logodds(sp)
+
+tot = 0
+suc = 0
+for idn, seq in read_record(arg.fasta):
+	seq = seq2int(seq)
+	
+	# Initialize matrices 
+	pmat = [[0]*(len(seq)-k+2) for _ in range(len(sp))]
+	tmat = [[-1]*(len(seq)-k+2) for _ in range(len(sp))]
+
+	# Initialize state probabilities
+	pmat[0][0] = math.log(0.5)
+	pmat[1][0] = math.log(0.5)
+	# Fill pmat
+	for i in range(1, len(seq)-k+2): # Iterate over each base
+		cur_seq = seq[i-1:i+k-1]
+		idx = numidx(cur_seq, k)
+		for j in range(len(sp)): # Iterate over each state against current base
+			max_score = None
+			max_state = None
+			for s in range(len(sp)):
+				# s=0 -> exon ; s=1 -> intron
+				# score = previous state p * transition state p * state p
+				score = pmat[s][i-1] + tp[s][j] + sp[j][idx]
+				if max_score == None or score > max_score:
+					max_score = score
+					max_state = s
+			pmat[j][i] = max_score
+			tmat[j][i] = max_state
+
+	# Trace back
+	max_state = None
+	max_score = None
+	for i in range(len(sp)):
+		score = pmat[i][len(seq)-k+1]
+		if max_score == None or score > max_score:
+			max_score = score
+			max_state = i
+
+	tb = []
+	curi = max_state
+	curj = len(seq)-k+1
+	while tmat[curi][curj] != -1:
+		tb.insert(0, tmat[curi][curj])
+		curj-=1
+		curi=tmat[curi][curj]
+
+	if arg.evaluation_type == 'exon' and evfeat(tb, 'exon'): suc+=1
+	if arg.evaluation_type == 'intron' and evfeat(tb, 'intron'): suc+=1
+	tot+=1
+	if arg.evaluation_type == 'genome':
+		features = evgenome(tb, k)
+
+if arg.evaluation_type != 'genome': print(f'success rate: {suc/tot}')
+else:
+	fs = ['exon', 'intron']
+	tmpfile = open('tmp_pdt.txt', 'w')
+	for feature in features:
+		ft = fs[feature[2]]
+		if ft == 'exon': tmpfile.write(f'Exon\t{feature[0]}\t{feature[1]}\n')
+	tmpfile.close()
+		
+	ant_coor = read_coordinates(arg.coordinates, len(seq))
+	pdt_coor = read_coordinates('tmp_pdt.txt', len(seq))
+	
+	num_ol = 0
+	num_nl = 0
+	for i in range(len(seq)):
+		if ant_coor[i] == 1 and pdt_coor[i] == 1: continue
+		if ant_coor[i] == pdt_coor[i]: num_ol+=1
+		else: num_nl+=1
+	print(num_ol/(num_ol+num_nl))
+	
+	os.system('rm tmp_pdt.txt')
+	
+		
+	

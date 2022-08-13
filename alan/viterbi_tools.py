@@ -1,7 +1,54 @@
 import math
 import sys
+import random
 
-def get_idx(kmer, k):
+def read_coordinates(coorfile, genlen):
+	coor = [1 for _ in range(genlen)]
+	with open(coorfile) as fh:
+		for line in fh.readlines():
+			f = line.split()
+			beg = int(f[1])-1
+			end = int(f[2])-1
+			for i in range(beg, end+1):
+				coor[i] = 0
+	return coor
+
+
+def evgenome(tb, k):
+	features = []
+	cur_state = tb[0]
+	beg = 1
+	end = None
+	for i, f in enumerate(tb):
+		if f != cur_state:
+			end = i + k - 1
+			features.append((beg, end, cur_state))
+			cur_state = f
+			beg = end+1
+	
+	features.append((beg,len(tb),cur_state))
+	return features
+	
+def evfeat(tb, feature):
+	count = sum(tb)
+	if feature == 'exon':
+		if 1 - count/len(tb) > 0.5: return True
+		return False
+	if feature == 'intron':
+		if count/len(tb) > 0.5: return True
+		return False
+		
+def seq2int(seq):
+	seq = list(seq)
+	for i in range(len(seq)):
+		if seq[i] == 'A' or seq[i] == 'a' : seq[i] = 0
+		if seq[i] == 'C' or seq[i] == 'c' : seq[i] = 1
+		if seq[i] == 'G' or seq[i] == 'g' : seq[i] = 2
+		if seq[i] == 'T' or seq[i] == 't' : seq[i] = 3
+		if seq[i] == 'N' or seq[i] == 'n' : seq[i] = random.randint(0,3)
+	return seq
+
+def ntidx(kmer, k):
 	idx = 0
 	for i in range(k):
 		nt = kmer[i]
@@ -11,6 +58,11 @@ def get_idx(kmer, k):
 		if nt == 'T' or nt == 't': idx += pow(4, k-i-1) * 3
 	return idx
 
+def numidx(kmer, k):
+	idx = 0
+	for i in range(k): idx += pow(4, k-i-1) * kmer[i]
+	return idx
+	
 def read_mm(mmf, feat):
 	kmers = None
 	k = None
@@ -27,9 +79,9 @@ def read_mm(mmf, feat):
 					k = len(kmer)
 					kmers = ([0 for _ in range(pow(4,k))])
 				prob = float(f[1])
-				kmers[get_idx(kmer, k)] = prob
+				kmers[ntidx(kmer, k)] = prob
 	
-	return kmers
+	return kmers, k
 
 def read_transition(tpf):
 	tp = [[0,0],[0,0]]
